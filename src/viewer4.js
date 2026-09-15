@@ -43,6 +43,7 @@ sun.shadow.bias = -.0001;
 scene.add(sun, sun.target);
 
 const sectionPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 100);
+const sectionFloorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 100);
 let modelRoot;
 let modelBounds;
 let sceneBounds;
@@ -53,11 +54,16 @@ const interiorLights = [];
 const materials = [];
 let glassMaterial;
 let interiorMaterial;
+let roomLabelMode = 'off';
+let sectionOpenedByRoomLabel = false;
+const roomLabels = [];
 
 const sectionToggle = document.getElementById('section-toggle');
 const sectionPanel = document.getElementById('section-panel');
 const heightSlider = document.getElementById('section-height');
 const loading = document.getElementById('loading');
+const roomLabelLayer = document.getElementById('room-labels');
+const roomFloorButtons = [...document.querySelectorAll('[data-room-floor]')];
 
 const daySky = new THREE.Color('#dce3df');
 const nightSky = new THREE.Color('#14242e');
@@ -106,12 +112,18 @@ function updateSection() {
   const enabled = sectionToggle.getAttribute('aria-pressed') === 'true';
   const percent = Number(heightSlider.value);
   sectionPlane.constant = enabled ? sectionHeight * percent / 100 : 100;
+  const secondFloor = enabled && percent >= 50;
+  const floorCutHeight = modelBounds ? modelBounds.min.y + sectionHeight * .43 : 0;
+  sectionFloorPlane.constant = secondFloor ? -floorCutHeight : 100;
   document.getElementById('section-value').textContent = `${percent}%`;
   viewport.dataset.sectionHeight = String(sectionPlane.constant);
 }
 
 sectionToggle.addEventListener('click', () => {
   const enabled = sectionToggle.getAttribute('aria-pressed') !== 'true';
+  const fromRoomLabel = sectionOpenedByRoomLabel;
+  sectionOpenedByRoomLabel = false;
+  if (enabled && roomLabelMode !== 'off' && !fromRoomLabel) setRoomLabelMode('off', false);
   sectionToggle.setAttribute('aria-pressed', String(enabled));
   sectionToggle.setAttribute('aria-expanded', String(enabled));
   sectionToggle.querySelector('span').textContent = enabled ? '返回完整建筑' : '切片查看';
@@ -120,10 +132,86 @@ sectionToggle.addEventListener('click', () => {
   const target = enabled ? new THREE.Vector3(0, sectionHeight * .42, 0) : sectionCamera.target;
   const position = enabled ? target.clone().addScaledVector(new THREE.Vector3(1, 1.5, 1.15).normalize(), camera.aspect < 1 ? 42 : 32) : sectionCamera.position;
   cameraFlight = { from: camera.position.clone(), targetFrom: controls.target.clone(), to: position, target, start: performance.now(), duration: 700 };
+  if (!enabled && roomLabelMode !== 'off') setRoomLabelMode('off', false);
   updateSection();
 });
-heightSlider.addEventListener('input', updateSection);
+heightSlider.addEventListener('input', () => {
+  if (roomLabelMode !== 'off') setRoomLabelMode('off', false);
+  updateSection();
+});
 controls.addEventListener('start', () => { cameraFlight = null; });
+
+function setRoomLabelMode(mode, openSection = true) {
+  roomLabelMode = mode;
+  roomFloorButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.roomFloor === mode)));
+  roomLabelLayer.setAttribute('aria-hidden', String(mode === 'off'));
+  if (mode === 'off' && openSection && sectionToggle.getAttribute('aria-pressed') === 'true') {
+    sectionToggle.click();
+    return;
+  }
+  if (mode !== 'off' && openSection) {
+    heightSlider.value = mode === '1F' ? '30' : '64';
+    if (sectionToggle.getAttribute('aria-pressed') !== 'true') {
+      sectionOpenedByRoomLabel = true;
+      sectionToggle.click();
+    }
+    else updateSection();
+    const target = new THREE.Vector3(0, sectionHeight * (mode === '1F' ? .22 : .5), 0);
+    const distance = camera.aspect < .65 ? 68 : camera.aspect < 1 ? 56 : 48;
+    const position = target.clone().addScaledVector(new THREE.Vector3(1, 1.5, 1.15).normalize(), distance);
+    cameraFlight = { from: camera.position.clone(), targetFrom: controls.target.clone(), to: position, target, start: performance.now(), duration: 700 };
+  }
+}
+roomFloorButtons.forEach(button => button.addEventListener('click', () => setRoomLabelMode(button.dataset.roomFloor)));
+
+function setupRoomLabels(bounds) {
+  const height = bounds.max.y - bounds.min.y;
+  const floorY = { '1F': bounds.min.y + 1.45, '2F': bounds.min.y + height * .475 + 1.25 };
+  const rooms = [
+    ['1F', '01', '大会议室', -8.6, 8.8], ['1F', '02', '大厅 / 前台', 2.1, 8.8],
+    ['1F', '03', '中会议室', 10.8, 8.8], ['1F', '04', '多功能区', 2.1, -.2],
+    ['1F', '05', '小会议室 1', 10.8, -2.65], ['1F', '06', '小会议室 2', 10.8, 1.6],
+    ['1F', '07', 'IT 机房', 4.8, -10.2], ['1F', '08', '数采间', 10.7, -10.1],
+    ['1F', '09', '配电间', -2.9, -11.5], ['1F', '10', '保洁 / 储藏', -4.5, -7.8],
+    ['1F', '11', '茶水间', -7.1, -11.2], ['1F', '12', '女生卫生间', -11.1, -10.5],
+    ['1F', '13', '男生卫生间', -11.1, -7.25], ['1F', '14', '洗手区', -7.0, -7.45],
+    ['1F', '15', '楼梯间', -8.0, -2.2],
+    ['2F', '01', '开放办公区', -2.8, 4.1], ['2F', '02', '会议室 1', 10.8, -9.0],
+    ['2F', '03', '会议室 2', 10.8, -2.1], ['2F', '04', '会议室 3', 10.8, 7.8],
+    ['2F', '05', '办公室', 5.4, -9.9], ['2F', '06', '资料室', -.8, -9.9],
+    ['2F', '07', '茶水间', -7.1, -11.2], ['2F', '08', '女生卫生间', -11.1, -10.5],
+    ['2F', '09', '男生卫生间', -11.1, -7.25], ['2F', '10', '洗手区', -7.0, -7.45],
+    ['2F', '11', '走道', -2.8, -6.4], ['2F', '12', '楼梯间', -8.0, -2.2],
+  ];
+  rooms.forEach(([floor, code, name, x, z], index) => {
+    const element = document.createElement('div');
+    element.className = 'room-label';
+    element.dataset.floor = floor;
+    element.dataset.align = x > 7 ? 'left' : x < -7 ? 'right' : index % 3 === 0 ? 'left' : 'right';
+    element.innerHTML = `<i class="room-label-anchor"></i><span class="room-label-card"><small class="room-label-code">${floor}-${code}</small><strong class="room-label-name">${name}</strong></span>`;
+    roomLabelLayer.append(element);
+    roomLabels.push({ floor, element, position: new THREE.Vector3(x, floorY[floor], z) });
+  });
+}
+
+function updateRoomLabels() {
+  if (roomLabelMode === 'off') {
+    roomLabels.forEach(label => { label.element.hidden = true; });
+    return;
+  }
+  const width = innerWidth;
+  const height = innerHeight;
+  roomLabels.forEach(label => {
+    if (label.floor !== roomLabelMode) { label.element.hidden = true; return; }
+    const projected = label.position.clone().project(camera);
+    const x = (projected.x * .5 + .5) * width;
+    const y = (-projected.y * .5 + .5) * height;
+    const outside = projected.z < -1 || projected.z > 1 || x < 18 || x > width - 18 || y < 98 || y > height - 46;
+    label.element.hidden = false;
+    label.element.classList.toggle('is-edge', outside);
+    label.element.style.transform = `translate3d(${x}px,${y}px,0)`;
+  });
+}
 
 function frameModel() {
   if (!modelBounds) return;
@@ -140,6 +228,133 @@ function frameModel() {
   sun.shadow.camera.updateProjectionMatrix();
 }
 
+function addFloorPlanFurniture(bounds) {
+  const height = bounds.max.y - bounds.min.y;
+  const firstFloorY = bounds.min.y + .12;
+  const secondFloorY = bounds.min.y + height * .475;
+  const group = new THREE.Group();
+  group.name = '平面布置图新增家具';
+
+  const furnitureMaterials = {
+    top: new THREE.MeshStandardMaterial({ color: '#b7b5ae', roughness: .72, metalness: .03 }),
+    frame: new THREE.MeshStandardMaterial({ color: '#3c474b', roughness: .44, metalness: .52 }),
+    chair: new THREE.MeshStandardMaterial({ color: '#667276', roughness: .8, metalness: .05 }),
+    screen: new THREE.MeshStandardMaterial({ color: '#16282e', roughness: .28, metalness: .38 }),
+    rack: new THREE.MeshStandardMaterial({ color: '#34454a', roughness: .5, metalness: .48 }),
+    rackFace: new THREE.MeshStandardMaterial({ color: '#17252a', roughness: .34, metalness: .62 }),
+  };
+  Object.values(furnitureMaterials).forEach(material => {
+    material.clippingPlanes = [sectionPlane, sectionFloorPlane];
+    material.clipShadows = true;
+    materials.push(material);
+  });
+
+  const box = (parent, size, position, material, name) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
+    mesh.position.set(...position);
+    mesh.name = name;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+
+  const addChair = (parent, x, y, z, rotation = 0) => {
+    const chair = new THREE.Group();
+    chair.name = '办公椅';
+    box(chair, [.48, .1, .48], [0, .46, 0], furnitureMaterials.chair, '椅座');
+    box(chair, [.48, .55, .09], [0, .77, .2], furnitureMaterials.chair, '椅背');
+    box(chair, [.08, .42, .08], [0, .21, 0], furnitureMaterials.frame, '椅脚');
+    chair.position.set(x, y, z);
+    chair.rotation.y = rotation;
+    parent.add(chair);
+  };
+
+  const addDesk = (parent, x, y, z, rotation = 0, withScreen = true) => {
+    const desk = new THREE.Group();
+    desk.name = '办公工位';
+    box(desk, [1.35, .09, .68], [0, .73, 0], furnitureMaterials.top, '桌面');
+    for (const legX of [-.52, .52]) {
+      box(desk, [.07, .69, .07], [legX, .36, -.24], furnitureMaterials.frame, '桌腿');
+      box(desk, [.07, .69, .07], [legX, .36, .24], furnitureMaterials.frame, '桌腿');
+    }
+    if (withScreen) {
+      box(desk, [.55, .34, .045], [0, 1.01, -.12], furnitureMaterials.screen, '显示器');
+      box(desk, [.07, .25, .07], [0, .83, -.12], furnitureMaterials.frame, '显示器支架');
+    }
+    desk.position.set(x, y, z);
+    desk.rotation.y = rotation;
+    parent.add(desk);
+  };
+
+  const addWorkstation = (parent, x, y, z, rotation = 0) => {
+    addDesk(parent, x, y, z, rotation);
+    const offset = new THREE.Vector3(0, 0, .78).applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation);
+    addChair(parent, x + offset.x, y, z + offset.z, rotation + Math.PI);
+  };
+
+  const addMeetingRoom = (parent, x, y, z, length, seats, rotation = 0) => {
+    const room = new THREE.Group();
+    room.name = '会议室家具';
+    box(room, [length, .1, 1.08], [0, .74, 0], furnitureMaterials.top, '会议桌');
+    for (const legX of [-length * .36, length * .36]) {
+      box(room, [.09, .68, .09], [legX, .36, 0], furnitureMaterials.frame, '会议桌腿');
+    }
+    const perSide = Math.ceil(seats / 2);
+    for (let i = 0; i < perSide; i++) {
+      const chairX = perSide === 1 ? 0 : -length * .36 + i * length * .72 / (perSide - 1);
+      addChair(room, chairX, 0, -.92, 0);
+      addChair(room, chairX, 0, .92, Math.PI);
+    }
+    room.position.set(x, y, z);
+    room.rotation.y = rotation;
+    parent.add(room);
+  };
+
+  const addRackRow = (parent, x, y, z, count, alongZ = true) => {
+    for (let i = 0; i < count; i++) {
+      const rack = new THREE.Group();
+      rack.name = '设备机柜';
+      box(rack, [.68, 1.92, .82], [0, .96, 0], furnitureMaterials.rack, '机柜柜体');
+      box(rack, [.56, 1.65, .025], [0, .98, .423], furnitureMaterials.rackFace, '机柜面板');
+      for (let slot = 0; slot < 6; slot++) {
+        box(rack, [.42, .025, .012], [0, .54 + slot * .2, .44], furnitureMaterials.frame, '设备槽位');
+      }
+      rack.position.set(x + (alongZ ? 0 : i * .92), y, z + (alongZ ? i * 1.02 : 0));
+      parent.add(rack);
+    }
+  };
+
+  const firstFloor = new THREE.Group();
+  firstFloor.name = '1F平面布置';
+  addMeetingRoom(firstFloor, 10.75, firstFloorY, 1.6, 2.4, 4, Math.PI / 2);
+  addMeetingRoom(firstFloor, 10.75, firstFloorY, -2.65, 2.4, 4, Math.PI / 2);
+  addMeetingRoom(firstFloor, 2.1, firstFloorY, -.3, 2.8, 6, 0);
+  addRackRow(firstFloor, 3.7, firstFloorY, -11.7, 4, false);
+  addRackRow(firstFloor, 9.4, firstFloorY, -11.7, 4, false);
+  addRackRow(firstFloor, 9.4, firstFloorY, -9.9, 4, false);
+  group.add(firstFloor);
+
+  const secondFloor = new THREE.Group();
+  secondFloor.name = '2F平面布置';
+  const deskXs = [-11.1, -8.2, -5.3, -1.6, 1.3, 4.2];
+  const deskZs = [10.2, 7.25, 4.3, 1.35, -1.6];
+  deskZs.forEach((z, row) => deskXs.forEach(x => {
+    const rotation = row % 2 ? Math.PI : 0;
+    addWorkstation(secondFloor, x, secondFloorY, z, rotation);
+  }));
+  for (const z of [-5.1, -7.8]) {
+    for (const x of [-1.5, 1.4, 4.3]) addWorkstation(secondFloor, x, secondFloorY, z, z < -6 ? Math.PI : 0);
+  }
+  addMeetingRoom(secondFloor, 10.75, secondFloorY, 8.6, 3.25, 8, Math.PI / 2);
+  addMeetingRoom(secondFloor, 10.75, secondFloorY, 2.25, 3.25, 8, Math.PI / 2);
+  addRackRow(secondFloor, -2.6, secondFloorY, -11.6, 4, false);
+  group.add(secondFloor);
+
+  scene.add(group);
+  viewport.dataset.floorPlanFurniture = '1F+2F';
+}
+
 async function loadModel() {
   const draco = new DRACOLoader();
   draco.setDecoderPath('./vendor/examples/jsm/libs/draco/');
@@ -153,7 +368,7 @@ async function loadModel() {
     node.castShadow = true; node.receiveShadow = true;
     const list = Array.isArray(node.material) ? node.material : [node.material];
     for (const material of list) {
-      material.clippingPlanes = [sectionPlane];
+      material.clippingPlanes = [sectionPlane, sectionFloorPlane];
       material.clipShadows = true;
       if (!materials.includes(material)) materials.push(material);
     }
@@ -227,10 +442,12 @@ async function loadModel() {
     const material = palette[classifyMaterial(node)];
     node.material = Array.isArray(node.material) ? node.material.map(() => material) : material;
     node.castShadow = true; node.receiveShadow = true;
-    material.clippingPlanes = [sectionPlane];
+    material.clippingPlanes = [sectionPlane, sectionFloorPlane];
     material.clipShadows = true;
     if (!materials.includes(material)) materials.push(material);
   });
+  addFloorPlanFurniture(modelBounds);
+  setupRoomLabels(modelBounds);
   const footprint = modelBounds.getSize(new THREE.Vector3());
   const baseSize = Math.max(14, Math.max(footprint.x, footprint.z) + 4);
   const baseTop = modelBounds.min.y;
@@ -281,5 +498,7 @@ renderer.setAnimationLoop(() => {
     controls.target.lerpVectors(cameraFlight.targetFrom, cameraFlight.target, eased);
     if (t === 1) cameraFlight = null;
   }
-  controls.update(); renderer.render(scene, camera);
+  controls.update();
+  updateRoomLabels();
+  renderer.render(scene, camera);
 });
