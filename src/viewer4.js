@@ -54,7 +54,7 @@ const interiorLights = [];
 const materials = [];
 let glassMaterial;
 let interiorMaterial;
-let roomLabelMode = 'off';
+let roomLabelMode = '1F';
 let sectionOpenedByRoomLabel = false;
 const roomLabels = [];
 
@@ -485,6 +485,7 @@ async function loadModel() {
   viewport.dataset.buildingBottom = String(modelBounds.min.y);
   viewport.dataset.baseTop = String(baseTop);
   sectionToggle.disabled = false;
+  setRoomLabelMode('1F');
   viewport.dataset.loaded = 'true';
 }
 
