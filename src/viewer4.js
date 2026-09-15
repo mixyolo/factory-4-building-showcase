@@ -1,8 +1,8 @@
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import * as THREE from '../vendor/build/three.module.js';
+import { GLTFLoader } from '../vendor/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from '../vendor/examples/jsm/loaders/DRACOLoader.js';
+import { OrbitControls } from '../vendor/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from '../vendor/examples/jsm/environments/RoomEnvironment.js';
 
 const viewport = document.getElementById('viewer');
 const scene = new THREE.Scene();
