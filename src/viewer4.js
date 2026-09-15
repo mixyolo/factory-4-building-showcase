@@ -54,11 +54,6 @@ const materials = [];
 let glassMaterial;
 let interiorMaterial;
 
-const lightControl = document.querySelector('.light-control');
-const lightToggle = document.getElementById('light-toggle');
-const lightPanel = document.getElementById('light-panel');
-const sunTime = document.getElementById('sun-time');
-const interiorStrength = document.getElementById('interior-strength');
 const sectionToggle = document.getElementById('section-toggle');
 const sectionPanel = document.getElementById('section-panel');
 const heightSlider = document.getElementById('section-height');
@@ -72,8 +67,6 @@ const dayGround = new THREE.Color('#77745c');
 const nightGround = new THREE.Color('#10151b');
 const highSun = new THREE.Color('#ffedc7');
 const lowSun = new THREE.Color('#ffad70');
-const hudLightState = document.getElementById('hud-light-state');
-
 function makeMicroRoughnessTexture() {
   const size = 64;
   const data = new Uint8Array(size * size);
@@ -86,8 +79,8 @@ function makeMicroRoughnessTexture() {
   return texture;
 }
 
-function updateLighting() {
-  const time = Number(sunTime.value);
+function setDefaultLighting() {
+  const time = 15.5;
   const solar = Math.sin((time - 6) / 24 * Math.PI * 2);
   const daylight = THREE.MathUtils.smoothstep(solar, -.12, .16);
   const darkness = 1 - daylight;
@@ -104,19 +97,9 @@ function updateLighting() {
   hemisphere.groundColor.lerpColors(nightGround, dayGround, daylight);
   hemisphere.intensity = .34 + daylight * .56;
   renderer.toneMappingExposure = .82 + daylight * .18;
-  const hours = Math.floor(time);
-  const minutes = Math.round((time - hours) * 60);
-  const angle = Math.round(THREE.MathUtils.radToDeg(elevation));
-  document.getElementById('sun-time-value').textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')} · ${angle >= 0 ? '+' : ''}${angle}°`;
-  if (hudLightState) hudLightState.textContent = `${darkness > .65 ? 'NIGHT' : daylight < .85 ? 'TWILIGHT' : 'DAY'} // SUN ${angle >= 0 ? '+' : ''}${angle}°`;
-  const interior = Number(interiorStrength.value);
-  document.getElementById('interior-strength-value').textContent = `${Math.round(interior * 100)}%`;
-  interiorLights.forEach(light => { light.intensity = interior * (.42 + darkness * 4.6); });
-  if (glassMaterial) glassMaterial.emissiveIntensity = interior * darkness * .58;
-  if (interiorMaterial) interiorMaterial.emissiveIntensity = interior * darkness * .14;
-  lightControl.dataset.mode = darkness > .65 ? 'night' : 'day';
-  lightToggle.firstElementChild.textContent = darkness > .65 ? '☾' : '☀';
-  viewport.dataset.lightMode = darkness > .65 ? 'night' : daylight < .85 ? 'twilight' : 'day';
+  interiorLights.forEach(light => { light.intensity = .58 + darkness * 2.2; });
+  if (glassMaterial) glassMaterial.emissiveIntensity = darkness * .18;
+  if (interiorMaterial) interiorMaterial.emissiveIntensity = darkness * .08;
 }
 
 function updateSection() {
@@ -127,21 +110,12 @@ function updateSection() {
   viewport.dataset.sectionHeight = String(sectionPlane.constant);
 }
 
-lightToggle.addEventListener('click', () => {
-  const open = lightToggle.getAttribute('aria-expanded') !== 'true';
-  lightToggle.setAttribute('aria-expanded', String(open));
-  lightPanel.hidden = !open;
-  if (open && !sectionPanel.hidden) { sectionPanel.hidden = true; sectionToggle.setAttribute('aria-expanded', 'false'); }
-});
-sunTime.addEventListener('input', updateLighting);
-interiorStrength.addEventListener('input', updateLighting);
 sectionToggle.addEventListener('click', () => {
   const enabled = sectionToggle.getAttribute('aria-pressed') !== 'true';
   sectionToggle.setAttribute('aria-pressed', String(enabled));
   sectionToggle.setAttribute('aria-expanded', String(enabled));
   sectionToggle.querySelector('span').textContent = enabled ? '返回完整建筑' : '切片查看';
   sectionPanel.hidden = !enabled;
-  if (enabled && !lightPanel.hidden) { lightPanel.hidden = true; lightToggle.setAttribute('aria-expanded', 'false'); }
   if (enabled) sectionCamera = { position: camera.position.clone(), target: controls.target.clone() };
   const target = enabled ? new THREE.Vector3(0, sectionHeight * .42, 0) : sectionCamera.target;
   const position = enabled ? target.clone().addScaledVector(new THREE.Vector3(1, 1.5, 1.15).normalize(), camera.aspect < 1 ? 42 : 32) : sectionCamera.position;
@@ -198,7 +172,7 @@ async function loadModel() {
   const palette = {
     facade: new THREE.MeshPhysicalMaterial({ color: '#9da6a5', roughness: .76, roughnessMap: microRoughness, metalness: .04, clearcoat: .14, clearcoatRoughness: .7 }),
     roof: new THREE.MeshPhysicalMaterial({ color: '#263238', roughness: .82, roughnessMap: microRoughness, metalness: .1, clearcoat: .24, clearcoatRoughness: .6 }),
-    glass: new THREE.MeshPhysicalMaterial({ color: '#6faeb9', roughness: .12, metalness: .08, transmission: .38, thickness: .08, ior: 1.45, transparent: true, opacity: .78, depthWrite: false, clearcoat: .55, clearcoatRoughness: .18, emissive: '#d18a50', emissiveIntensity: 0 }),
+    glass: new THREE.MeshPhysicalMaterial({ color: '#246d82', roughness: .06, metalness: .12, transmission: .04, thickness: .02, ior: 1.45, transparent: true, opacity: .42, depthWrite: false, side: THREE.DoubleSide, clearcoat: .65, clearcoatRoughness: .12, emissive: '#0a1c22', emissiveIntensity: 0 }),
     metal: new THREE.MeshPhysicalMaterial({ color: '#52636a', roughness: .3, metalness: .78, clearcoat: .18, clearcoatRoughness: .35 }),
     wood: new THREE.MeshPhysicalMaterial({ color: '#806047', roughness: .68, roughnessMap: microRoughness, metalness: .02, clearcoat: .08, clearcoatRoughness: .8 }),
     plant: new THREE.MeshPhysicalMaterial({ color: '#7fae70', roughness: .82, metalness: 0, side: THREE.DoubleSide, emissive: '#16351d', emissiveIntensity: .08 }),
@@ -217,6 +191,7 @@ async function loadModel() {
     const largest = Math.max(size.x, size.y, size.z);
     const buildingSize = modelBounds.getSize(new THREE.Vector3());
     const nodeName = (node.name || '').toLowerCase();
+    const firstFloorGlassDoor = /^(rectangle42[4-7]|line037|line165|line166|line167)$/.test(nodeName);
     const exteriorRod = /^a\d/.test(nodeName) && center.y > 7.75 && center.y < 8.12 && smallest < .12 && largest > 1.4 && largest < 2.2;
     const roofDetailRod = /^a\d/.test(nodeName) && center.y > 8.0 && center.y < 9.1 && largest < 1.2;
     const exteriorLouver = /^le\d/.test(nodeName) && center.y > 7.7 && center.y < 8.6 && largest > 1.5 && (Math.abs(center.x) > 13.1 || Math.abs(center.z) > 13.1);
@@ -226,16 +201,19 @@ async function loadModel() {
     const exteriorPlant = /^xfds00(4[3-9]|50)/.test(nodeName);
     if (/^xfds0(5[3-9]|6[0-8])/.test(nodeName) || exteriorPlant || exteriorRod || roofDetailRod || exteriorLouver || roofTriangle || roofMarkerZone || plantZone) { node.visible = false; return 'facade'; }
     if (/sofa|pillow|poliform|3dfreehub|chair|table|desk|bed|cabinet|柜|沙发|桌|椅/.test(name)) return 'interior';
-    if (/window|glass|glaz|curtain|窗|玻璃|door|gate|门/.test(name)) return 'glass';
+    const sourceMaterials = Array.isArray(node.material) ? node.material : [node.material];
+    const sourceIsGlass = sourceMaterials.some(material => material?.transparent || material?.transmission > .05 || /glass|window|glaz|窗|玻璃/.test(material?.name || ''));
+    if (firstFloorGlassDoor || sourceIsGlass || /window|glass|glaz|curtain|窗|玻璃|door|gate|门/.test(name)) return 'glass';
     if (size.x > buildingSize.x * .5 && size.z > buildingSize.z * .5 && size.y < buildingSize.y * .2 && bounds.max.y > modelBounds.max.y - 1.5) return 'roof';
     if (/ceiling|roof|屋面|顶|rectangle006|rectangle428|rectangle437|rectangle438|rectangle439|rectangle440|rectangle933|rectangle936|line001|line002|line003/.test(name) || (smallest < .13 && size.x > 2 && size.z > 2)) return 'roof';
-    if (/(^| )line|(^| )linz/i.test(name)) return 'metal';
     const detailObject = /line|无极|zz|le\d|xfds/i.test(name);
     const panelArea = [...[size.x * size.y, size.x * size.z, size.y * size.z]].sort((a, b) => b - a)[0];
-    if (!detailObject && smallest < .09 && largest < 3.2 && panelArea > .22) return 'glass';
-    const groundLevel = bounds.min.y < modelBounds.min.y + 3.35;
-    const facadePanel = smallest < .24 && size.y > 1.8 && largest < 4.6 && groundLevel;
-    if (facadePanel) return 'glass';
+    const dimensions = [size.x, size.y, size.z].sort((a, b) => a - b);
+    const verticalPane = size.y > .55 && dimensions[1] > .22 && largest < 3.4;
+    // The model exports several window faces as "line" objects. Detect broad vertical panes
+    // before the linework fallback, while keeping narrow mullions and rails as metal.
+    if (smallest < .12 && verticalPane && panelArea > .22) return 'glass';
+    if (/(^| )line|(^| )linz/i.test(name)) return 'metal';
     if (/stair|rail|handrail|栏杆|楼梯/.test(name)) return 'metal';
     if (/wood|timber|木/.test(name)) return 'wood';
     return 'facade';
@@ -264,7 +242,7 @@ async function loadModel() {
   scene.add(base);
   const slab = new THREE.Mesh(
     new THREE.BoxGeometry(baseSize, .08, baseSize),
-    new THREE.MeshStandardMaterial({ color: '#7d857e', roughness: .96 }),
+    new THREE.MeshStandardMaterial({ color: '#e1e0da', roughness: .96 }),
   );
   slab.name = '4号楼场地基面';
   slab.position.y = baseTop + .01;
@@ -280,7 +258,7 @@ async function loadModel() {
   }
   frameModel();
   camera.updateMatrixWorld(true);
-  updateLighting(); updateSection();
+  setDefaultLighting(); updateSection();
   loading?.classList.add('finished');
   viewport.dataset.model = 'model/4-building.glb';
   viewport.dataset.meshes = String(materials.length);
