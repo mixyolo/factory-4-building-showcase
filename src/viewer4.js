@@ -173,6 +173,7 @@ async function loadModel() {
     facade: new THREE.MeshPhysicalMaterial({ color: '#9da6a5', roughness: .76, roughnessMap: microRoughness, metalness: .04, clearcoat: .14, clearcoatRoughness: .7 }),
     roof: new THREE.MeshPhysicalMaterial({ color: '#263238', roughness: .82, roughnessMap: microRoughness, metalness: .1, clearcoat: .24, clearcoatRoughness: .6 }),
     glass: new THREE.MeshPhysicalMaterial({ color: '#246d82', roughness: .06, metalness: .12, transmission: .04, thickness: .02, ior: 1.45, transparent: true, opacity: .42, depthWrite: false, side: THREE.DoubleSide, clearcoat: .65, clearcoatRoughness: .12, emissive: '#0a1c22', emissiveIntensity: 0 }),
+    floor: new THREE.MeshPhysicalMaterial({ color: '#a7aaa7', roughness: .88, roughnessMap: microRoughness, metalness: .02 }),
     metal: new THREE.MeshPhysicalMaterial({ color: '#52636a', roughness: .3, metalness: .78, clearcoat: .18, clearcoatRoughness: .35 }),
     wood: new THREE.MeshPhysicalMaterial({ color: '#806047', roughness: .68, roughnessMap: microRoughness, metalness: .02, clearcoat: .08, clearcoatRoughness: .8 }),
     plant: new THREE.MeshPhysicalMaterial({ color: '#7fae70', roughness: .82, metalness: 0, side: THREE.DoubleSide, emissive: '#16351d', emissiveIntensity: .08 }),
@@ -192,6 +193,7 @@ async function loadModel() {
     const buildingSize = modelBounds.getSize(new THREE.Vector3());
     const nodeName = (node.name || '').toLowerCase();
     const firstFloorGlassDoor = /^(rectangle42[4-7]|line037|line165|line166|line167)$/.test(nodeName);
+    const firstFloorInteriorFloor = center.y < modelBounds.min.y + .35 && size.y < .2 && size.x > 1.5 && size.z > 1.5;
     const exteriorRod = /^a\d/.test(nodeName) && center.y > 7.75 && center.y < 8.12 && smallest < .12 && largest > 1.4 && largest < 2.2;
     const roofDetailRod = /^a\d/.test(nodeName) && center.y > 8.0 && center.y < 9.1 && largest < 1.2;
     const exteriorLouver = /^le\d/.test(nodeName) && center.y > 7.7 && center.y < 8.6 && largest > 1.5 && (Math.abs(center.x) > 13.1 || Math.abs(center.z) > 13.1);
@@ -201,6 +203,7 @@ async function loadModel() {
     const exteriorPlant = /^xfds00(4[3-9]|50)/.test(nodeName);
     if (/^xfds0(5[3-9]|6[0-8])/.test(nodeName) || exteriorPlant || exteriorRod || roofDetailRod || exteriorLouver || roofTriangle || roofMarkerZone || plantZone) { node.visible = false; return 'facade'; }
     if (/sofa|pillow|poliform|3dfreehub|chair|table|desk|bed|cabinet|柜|沙发|桌|椅/.test(name)) return 'interior';
+    if (firstFloorInteriorFloor) return 'floor';
     const sourceMaterials = Array.isArray(node.material) ? node.material : [node.material];
     const sourceIsGlass = sourceMaterials.some(material => material?.transparent || material?.transmission > .05 || /glass|window|glaz|窗|玻璃/.test(material?.name || ''));
     if (firstFloorGlassDoor || sourceIsGlass || /window|glass|glaz|curtain|窗|玻璃|door|gate|门/.test(name)) return 'glass';
